@@ -144,7 +144,7 @@ while True:
                 x1, y1, x2, y2 = [int(v) for v in box]
                 cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-                label = f"Conf:{prob:.2f} Sim:{sim:.2f}"
+                label = f"Conf:{prob:.2f}  Sim:{sim:.2f} {ref_names[best_idx]}"
                 color = (0, 255, 0) if sim > threshold else (0, 0, 255)
                 cv2.putText(frame, label, (x1, y1 - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
