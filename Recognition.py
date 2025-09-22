@@ -80,7 +80,7 @@ for img_path in ref_images:
 
     # load overlay image
     disp_img = cv2.imread(img_path)
-    disp_img = cv2.resize(disp_img, (414, 633))
+    disp_img = cv2.resize(disp_img, (258, 396))
     ref_display_images.append(disp_img)
 
 # Load embeddings back from DB
@@ -96,7 +96,7 @@ for r in rows:
     ref_embeddings.append(pickle.loads(r[2]))
 
 # ------------------ Background & Overlays ------------------ #
-imgBackground = cv2.imread("background.png")
+imgBackground = cv2.imread("DeepVision_Background.jpg")
 
 # ------------------ Webcam Init ------------------ #
 update_splash(window_name, "Starting Camera...")
@@ -159,10 +159,11 @@ while True:
                                     (best_id, float(sim)))
                         conn.commit()
                         last_seen[best_id] = now  # update last seen time
+                    imgBackground[304:304 + 396, 713:713 + 258] = ref_display_images[best_idx]
 
-                    imgBackground[44:44 + 633, 808:808 + 414] = ref_display_images[best_idx]
 
-    imgBackground[162:162 + 480, 55:55 + 640] = frame
+    resized_frame = cv2.resize(frame, (529, 397))
+    imgBackground[303:700, 93:622] = resized_frame
     cv2.imshow("Face Recognition (press q to quit)", imgBackground)
 
     if cv2.waitKey(1) & 0xFF == ord('q'):
