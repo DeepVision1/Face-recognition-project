@@ -27,7 +27,8 @@ cursor.execute("""
 CREATE TABLE IF NOT EXISTS faces (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT,
-    embedding BLOB
+    Face_embedding BLOB,
+    Voice_embedding BLOB
 )
 """)
 
@@ -73,7 +74,7 @@ for img_path in ref_images:
             if ref_face.ndim == 3:
                 ref_face = ref_face.unsqueeze(0)
             embedding = facenet(ref_face).detach().numpy()[0]
-            cursor.execute("INSERT INTO faces (name, embedding) VALUES (?, ?)",(name, pickle.dumps(embedding)))
+            cursor.execute("INSERT INTO faces (name, Face_embedding) VALUES (?, ?)",(name, pickle.dumps(embedding)))
             conn.commit()
         else:
             raise ValueError(f"No face detected in {img_path}")
@@ -84,7 +85,7 @@ for img_path in ref_images:
     ref_display_images.append(disp_img)
 
 # Load embeddings back from DB
-cursor.execute("SELECT id, name, embedding FROM faces")
+cursor.execute("SELECT id, name, Face_embedding FROM faces")
 rows = cursor.fetchall()
 
 ref_ids = []
