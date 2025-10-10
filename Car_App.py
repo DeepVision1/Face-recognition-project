@@ -64,7 +64,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 mtcnn = MTCNN(keep_all=True, device=device)
 facenet = InceptionResnetV1(pretrained='vggface2').eval()
 
-siamese_model = tf.keras.models.load_model("Models/Voice_verification_model.h5", compile=False)
+siamese_model = tf.keras.models.load_model("Models/Voice_verification_model2.h5", compile=False)
 embedding_model = siamese_model.layers[3]
 
 # -------------------------------

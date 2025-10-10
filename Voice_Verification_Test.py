@@ -8,7 +8,7 @@ import time
 # -------------------------------
 # 1. Load the Siamese model
 # -------------------------------
-siamese_model = tf.keras.models.load_model("Models/Voice_verification_model.h5", compile=False)
+siamese_model = tf.keras.models.load_model("Models/Voice_verification_model2.h5", compile=False)
 
 # Extract the embedding submodel (the part that generates embeddings from one input)
 # usually input shape is (40,1) for MFCCs or (n_mels, T, 1) for spectrograms
