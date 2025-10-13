@@ -113,7 +113,7 @@ frame_count = 0
 skip_frames = 5
 scale = 0.5
 boxes, probs, faces = None, None, None
-threshold = 0.5
+threshold = 0.6
 last_seen = {}  # person_id -> timestamp
 cooldown = 30    # seconds to wait before re-logging same person
 
