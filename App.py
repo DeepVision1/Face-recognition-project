@@ -2,7 +2,6 @@
 # DEEPVISION CAR APP - COMPLETE INTEGRATION
 # Face + Voice + Drowsiness Detection System
 # ========================================
-
 import cv2
 import torch
 import numpy as np
@@ -21,39 +20,16 @@ import librosa
 import tensorflow as tf
 import sounddevice as sd
 
-# Drowsiness detection imports (with error handling)
-try:
-    from ultralytics import YOLO
-    YOLO_AVAILABLE = True
-except:
-    YOLO_AVAILABLE = False
-    print("⚠️ YOLO not available - continuing without YOLO detection")
-
-try:
-    import mediapipe as mp
-    MP_AVAILABLE = True
-except:
-    MP_AVAILABLE = False
-    print("⚠️ MediaPipe not available - eye tracking disabled")
-
-try:
-    import simpleaudio as sa
-    SIMPLEAUDIO_AVAILABLE = True
-except:
-    SIMPLEAUDIO_AVAILABLE = False
-    try:
-        import winsound
-        WINSOUND_AVAILABLE = True
-    except:
-        WINSOUND_AVAILABLE = False
-
+from ultralytics import YOLO
+import mediapipe as mp
+import winsound
 
 # ========================================
 # CONFIGURATION
 # ========================================
 FACE_THRESHOLD = 0.5
 FACE_COOLDOWN = 30
-VOICE_THRESHOLD = 0.6
+VOICE_THRESHOLD = 0.7
 VOICE_DURATION = 3
 VOICE_SR = 16000
 EAR_THRESHOLD = 0.20
@@ -118,52 +94,27 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 mtcnn = MTCNN(keep_all=True, device=device)
 facenet = InceptionResnetV1(pretrained='vggface2').eval()
 
-# Load voice model
 update_splash(window_name, "Loading Voice Model...")
-try:
-    siamese_model = tf.keras.models.load_model("Models/Voice_verification_model2.h5", compile=False)
-    embedding_model = siamese_model.layers[3]
-    VOICE_MODEL_LOADED = True
-    print("✅ Voice model loaded successfully")
-except Exception as e:
-    VOICE_MODEL_LOADED = False
-    print(f"⚠️ Voice model not loaded: {e}")
-    print("   Voice verification will be skipped")
 
-# Load drowsiness models
+siamese_model = tf.keras.models.load_model("Models/Voice_verification_model2.h5", compile=False)
+embedding_model = siamese_model.layers[3]
+print("✅ Voice model loaded successfully")
+
 update_splash(window_name, "Loading Drowsiness Models...")
-yolo_model = None
-if YOLO_AVAILABLE:
-    try:
-        yolo_model = YOLO('yolov8n.pt')
-        print("✅ YOLO loaded")
-    except:
-        print("⚠️ YOLO model not loaded")
 
-face_mesh = None
-if MP_AVAILABLE:
-    mp_face_mesh = mp.solutions.face_mesh
-    face_mesh = mp_face_mesh.FaceMesh(
-        static_image_mode=False,
-        max_num_faces=1,
-        refine_landmarks=True,
-        min_detection_confidence=0.5,
-        min_tracking_confidence=0.5
-    )
-    print("✅ MediaPipe loaded")
-
+yolo_model = YOLO("Models/yolov8n.pt")
+mp_face_mesh = mp.solutions.face_mesh
+face_mesh = mp_face_mesh.FaceMesh(
+    static_image_mode=False,
+    max_num_faces=1,
+    refine_landmarks=True,
+    min_detection_confidence=0.5,
+    min_tracking_confidence=0.5
+)
 
 # ========================================
 # AUDIO ALERT
 # ========================================
-ALERT_WAVE = None
-if SIMPLEAUDIO_AVAILABLE:
-    fr = 44100
-    t = np.linspace(0, 0.5, int(fr * 0.5), False)
-    tone = np.sin(440 * 2 * np.pi * t) * 0.3
-    audio = (tone * (2**15 - 1)).astype(np.int16)
-    ALERT_WAVE = sa.AudioData(audio.tobytes(), sample_rate=fr, num_channels=1, sample_width=2)
-
 last_alert_time = 0
 
 def play_alert():
@@ -172,19 +123,7 @@ def play_alert():
     if now - last_alert_time < ALERT_COOLDOWN:
         return
     last_alert_time = now
-    
-    if SIMPLEAUDIO_AVAILABLE and ALERT_WAVE is not None:
-        try:
-            sa.play_buffer(ALERT_WAVE._data, 1, 2, ALERT_WAVE.sample_rate)
-            return
-        except:
-            pass
-    if WINSOUND_AVAILABLE:
-        try:
-            winsound.Beep(1000, 500)
-            return
-        except:
-            pass
+    winsound.Beep(1000, 500)
     print("🚨 DROWSINESS ALERT!")
 
 
@@ -298,69 +237,65 @@ for img_path in ref_images:
 # ========================================
 update_splash(window_name, "Loading Voice Samples...")
 
-if VOICE_MODEL_LOADED:
-    voices_base_path = "voices"
+
+voices_base_path = "voices"
+
+if os.path.exists(voices_base_path):
+    voice_folders = [f for f in os.listdir(voices_base_path) 
+                    if os.path.isdir(os.path.join(voices_base_path, f))]
     
-    if os.path.exists(voices_base_path):
-        voice_folders = [f for f in os.listdir(voices_base_path) 
-                        if os.path.isdir(os.path.join(voices_base_path, f))]
+    print(f"\n📁 Found {len(voice_folders)} voice folders")
+    
+    for person_folder in voice_folders:
+        person_name = person_folder
+        folder_path = os.path.join(voices_base_path, person_folder)
         
-        print(f"\n📁 Found {len(voice_folders)} voice folders")
+        cursor.execute("SELECT id, Voice_embedding FROM faces WHERE name=?", (person_name,))
+        result = cursor.fetchone()
         
-        for person_folder in voice_folders:
-            person_name = person_folder
-            folder_path = os.path.join(voices_base_path, person_folder)
-            
-            cursor.execute("SELECT id, Voice_embedding FROM faces WHERE name=?", (person_name,))
-            result = cursor.fetchone()
-            
-            if result is None:
-                print(f"⚠️ Person '{person_name}' not found in database. Add face first!")
+        if result is None:
+            print(f"⚠️ Person '{person_name}' not found in database. Add face first!")
+            continue
+        
+        person_id, existing_voice = result
+        
+        if existing_voice is not None:
+            print(f"✅ Voice already exists for: {person_name}")
+            continue
+        
+        audio_files = glob.glob(os.path.join(folder_path, "*.wav"))
+        
+        if not audio_files:
+            print(f"⚠️ No .wav files found for: {person_name}")
+            continue
+        
+        print(f"🎤 Processing voice for: {person_name}")
+        print(f"   Found {len(audio_files)} audio files")
+        
+        voice_embeddings = []
+        
+        for audio_file in audio_files:
+            try:
+                audio_data, sr = librosa.load(audio_file, sr=VOICE_SR)
+                emb = Voice_embedding(embedding_model, audio_data, sr=sr)
+                voice_embeddings.append(emb.numpy())
+            except Exception as e:
+                print(f"Error processing {os.path.basename(audio_file)}: {e}")
                 continue
+        
+        if voice_embeddings:
+            avg_embedding = np.mean(voice_embeddings, axis=0)
+            avg_embedding = avg_embedding / np.linalg.norm(avg_embedding)
             
-            person_id, existing_voice = result
+            cursor.execute("UPDATE faces SET Voice_embedding=? WHERE id=?",(pickle.dumps(avg_embedding), person_id))
+            conn.commit()
             
-            if existing_voice is not None:
-                print(f"✅ Voice already exists for: {person_name}")
-                continue
-            
-            audio_files = glob.glob(os.path.join(folder_path, "*.wav"))
-            
-            if not audio_files:
-                print(f"⚠️ No .wav files found for: {person_name}")
-                continue
-            
-            print(f"🎤 Processing voice for: {person_name}")
-            print(f"   Found {len(audio_files)} audio files")
-            
-            voice_embeddings = []
-            
-            for audio_file in audio_files:
-                try:
-                    audio_data, sr = librosa.load(audio_file, sr=VOICE_SR)
-                    emb = Voice_embedding(embedding_model, audio_data, sr=sr)
-                    voice_embeddings.append(emb.numpy())
-                except Exception as e:
-                    print(f"   ❌ Error processing {os.path.basename(audio_file)}: {e}")
-                    continue
-            
-            if voice_embeddings:
-                avg_embedding = np.mean(voice_embeddings, axis=0)
-                avg_embedding = avg_embedding / np.linalg.norm(avg_embedding)
-                
-                cursor.execute(
-                    "UPDATE faces SET Voice_embedding=? WHERE id=?",
-                    (pickle.dumps(avg_embedding), person_id)
-                )
-                conn.commit()
-                
-                print(f"   ✅ Saved voice embedding (averaged {len(voice_embeddings)} samples)")
-            else:
-                print(f"   ❌ No valid voice embeddings for: {person_name}")
-    else:
-        print(f"⚠️ Voices folder not found: {voices_base_path}")
+            print(f"   ✅ Saved voice embedding (averaged {len(voice_embeddings)} samples)")
+        else:
+            print(f"   ❌ No valid voice embeddings for: {person_name}")
 else:
-    print("⚠️ Voice model not loaded - skipping voice embedding")
+    print(f"⚠️ Voices folder not found: {voices_base_path}")
+
 
 
 # ========================================
@@ -409,10 +344,6 @@ cap.set(3, 640)
 cap.set(4, 480)
 
 imgBackground = cv2.imread("DeepVision_Background.jpg")
-if imgBackground is None:
-    print("⚠️ Background image not found, creating blank background")
-    imgBackground = np.ones((720, 1280, 3), dtype=np.uint8) * 50
-
 cv2.destroyWindow(window_name)
 
 
@@ -441,7 +372,6 @@ print("Controls:")
 print("  V - Verify voice (when face recognized)")
 print("  R - Reset to face detection")
 print("  Q - Quit")
-print("  H - Help")
 print("="*60 + "\n")
 
 # ========================================
@@ -502,14 +432,9 @@ while True:
                                     ref_display_images[best_idx]
                             
                             now = time.time()
-                            if recognized_person_id not in last_seen or \
-                                (now - last_seen[recognized_person_id]) > FACE_COOLDOWN:
-                                cursor.execute(
-                                    """INSERT INTO recognition_log 
-                                        (person_id, similarity, verification_type) 
-                                        VALUES (?, ?, ?)""",
-                                    (recognized_person_id, float(sim), 'face')
-                                )
+                            if recognized_person_id not in last_seen or (now - last_seen[recognized_person_id]) > FACE_COOLDOWN:
+                                cursor.execute("""INSERT INTO recognition_log (person_id, similarity, verification_type) VALUES (?, ?, ?)""",
+                                (recognized_person_id, float(sim), 'face'))
                                 conn.commit()
                                 last_seen[recognized_person_id] = now
                             
@@ -559,51 +484,43 @@ while True:
             cv2.imshow("DeepVision System", imgBackground)
             cv2.waitKey(100)
             
-            if not VOICE_MODEL_LOADED:
-                print("⚠️ Voice model not available, skipping...")
+
+
+            audio = record_voice()
+            test_voice_emb = Voice_embedding(embedding_model, audio)
+            
+            ref_voice_emb = ref_voice_embeddings[recognized_person_idx]
+            
+            if ref_voice_emb is None:
+                print(f"⚠️ No voice reference for {recognized_person_name}")
                 current_state = STATE_AUTHENTICATED
-                voice_verification_attempted = True
             else:
-                try:
-                    audio = record_voice()
-                    test_voice_emb = Voice_embedding(embedding_model, audio)
-                    
-                    ref_voice_emb = ref_voice_embeddings[recognized_person_idx]
-                    
-                    if ref_voice_emb is None:
-                        print(f"⚠️ No voice reference for {recognized_person_name}")
-                        current_state = STATE_AUTHENTICATED
-                    else:
-                        voice_sim = Voice_cosine_similarity(
-                            test_voice_emb, 
-                            ref_voice_emb.reshape(1, -1)
-                        )
-                        
-                        print(f"Voice Similarity: {voice_sim:.4f} (threshold: {VOICE_THRESHOLD})")
-                        
-                        if voice_sim > VOICE_THRESHOLD:
-                            print(f"✅ Voice Verified!")
-                            
-                            cursor.execute(
-                                """INSERT INTO recognition_log 
-                                    (person_id, similarity, verification_type) 
-                                    VALUES (?, ?, ?)""",
-                                (recognized_person_id, float(voice_sim), 'voice')
-                            )
-                            conn.commit()
-                            
-                            current_state = STATE_AUTHENTICATED
-                        else:
-                            print(f"❌ Voice Mismatch! Returning to face detection...")
-                            current_state = STATE_FACE_DETECTION
-                            recognized_person_id = None
-                            recognized_person_name = None
+                voice_sim = Voice_cosine_similarity(
+                    test_voice_emb, 
+                    ref_voice_emb.reshape(1, -1)
+                )
                 
-                except Exception as e:
-                    print(f"⚠️ Voice verification error: {e}")
+                print(f"Voice Similarity: {voice_sim:.4f} (threshold: {VOICE_THRESHOLD})")
+                
+                if voice_sim > VOICE_THRESHOLD:
+                    print(f"✅ Voice Verified!")
+                    
+                    cursor.execute(
+                        """INSERT INTO recognition_log 
+                            (person_id, similarity, verification_type) 
+                            VALUES (?, ?, ?)""",
+                        (recognized_person_id, float(voice_sim), 'voice')
+                    )
+                    conn.commit()
+                    
                     current_state = STATE_AUTHENTICATED
-                
-                voice_verification_attempted = True
+                else:
+                    print(f"❌ Voice Mismatch! Returning to face detection...")
+                    current_state = STATE_FACE_DETECTION
+                    recognized_person_id = None
+                    recognized_person_name = None
+            
+            voice_verification_attempted = True
     
     # ========================================
     # STATE: AUTHENTICATED
@@ -707,14 +624,6 @@ while True:
         if current_state == STATE_FACE_RECOGNIZED:
             current_state = STATE_VOICE_VERIFICATION
             print(f"\n🎤 Starting voice verification...")
-    elif key == ord('h'):
-        print("\n" + "="*50)
-        print("KEYBOARD CONTROLS:")
-        print("  Q - Quit")
-        print("  R - Reset to face detection")
-        print("  V - Verify voice (when face recognized)")
-        print("  H - Help")
-        print("="*50 + "\n")
 
 # Cleanup
 cap.release()

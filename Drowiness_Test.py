@@ -34,7 +34,7 @@ except Exception:
     except Exception:
         WINSOUND_AVAILABLE = False
 
-YOLO_MODEL_PATH = 'yolov8n.pt'
+YOLO_MODEL_PATH = 'Models/yolov8n.pt'
 WEBCAM_INDEX = 0
 EAR_THRESHOLD = 0.20
 EAR_CONSEC_FRAMES = 15
@@ -97,15 +97,7 @@ if MP_AVAILABLE:
 else:
     face_mesh = None
 
-yolo_model = None
-if YOLO_AVAILABLE:
-    try:
-        yolo_model = YOLO(YOLO_MODEL_PATH)
-    except Exception:
-        try:
-            yolo_model = YOLO('yolov8n.pt')
-        except Exception:
-            yolo_model = None
+yolo_model = YOLO(YOLO_MODEL_PATH)
 
 def main():
     cap = cv2.VideoCapture(WEBCAM_INDEX)
@@ -129,7 +121,6 @@ def main():
                 for box in r.boxes:
                     x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
                     conf = float(box.conf[0])
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
                     cv2.putText(frame, f'{conf:.2f}', (x1, y1 - 6), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0,255,0), 1)
             except Exception:
                 pass

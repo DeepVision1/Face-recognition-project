@@ -13,7 +13,7 @@ def record_voice(filename, duration=3, sr=16000):
     sf.write(filename, recording, sr)
     print(f"Saved: {filename}")
 
-def record_multiple_clips(folder="voices/silence", num_clips=5, duration=3, sr=16000):
+def record_multiple_clips(folder="silence", num_clips=5, duration=3, sr=16000):
     os.makedirs(folder, exist_ok=True)
 
     for i in range(1, num_clips + 1):
@@ -22,4 +22,4 @@ def record_multiple_clips(folder="voices/silence", num_clips=5, duration=3, sr=1
 
 if __name__ == "__main__":
     # Record 5 clips by default
-    record_multiple_clips(folder="voices/Amgad", num_clips=10, duration=3)
+    record_multiple_clips(folder="Amgad", num_clips=10, duration=3)
