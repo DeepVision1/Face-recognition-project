@@ -13,10 +13,8 @@ import os
 import math
 import librosa
 import tensorflow as tf
-from ultralytics import YOLO
 import mediapipe as mp
-import threading
-import queue
+import sounddevice as sd
 
 # ========================================
 # CONFIGURATION
@@ -100,7 +98,6 @@ def load_models():
     embedding_model = siamese_model.layers[3]
     
     # Drowsiness models
-    yolo_model = YOLO("Models/yolov8n.pt")
     mp_face_mesh = mp.solutions.face_mesh
     face_mesh = mp_face_mesh.FaceMesh(
         static_image_mode=False,
@@ -226,7 +223,7 @@ def load_reference_data(conn, cursor, mtcnn, facenet, embedding_model, device):
                     avg_embedding = avg_embedding / np.linalg.norm(avg_embedding)
                     
                     cursor.execute("UPDATE faces SET Voice_embedding=? WHERE id=?",
-                                 (pickle.dumps(avg_embedding), person_id))
+                                (pickle.dumps(avg_embedding), person_id))
                     conn.commit()
                     print(f"✅ Added voice for: {person_name}")
     
@@ -268,11 +265,10 @@ print(f"\n📋 Loaded {len(ref_names)} persons from database")
 # ========================================
 def process_face_detection(frame):
     """Process frame for face detection and recognition"""
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
     # Detect faces
-    boxes, probs = mtcnn.detect(frame_rgb)
-    faces = mtcnn(frame_rgb)
+    boxes, probs = mtcnn.detect(frame)
+    faces = mtcnn(frame)
     
     if boxes is not None and faces is not None and len(ref_face_embeddings) > 0:
         for box, prob, face_tensor in zip(boxes, probs, faces):
@@ -357,10 +353,9 @@ def process_voice_verification(audio_data):
 
 def process_monitoring(frame):
     """Process frame for drowsiness monitoring"""
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     h, w = frame.shape[:2]
     
-    mp_results = face_mesh.process(frame_rgb)
+    mp_results = face_mesh.process(frame)
     
     alert_messages = []
     
@@ -424,7 +419,6 @@ def process_monitoring(frame):
 # ========================================
 def video_stream():
     """Generate video frames with automatic processing"""
-    import sounddevice as sd
     
     cap = cv2.VideoCapture(0)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
@@ -437,7 +431,9 @@ def video_stream():
         ret, frame = cap.read()
         if not ret:
             break
-        
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
         state.frame_count += 1
         
         # FACE DETECTION STATE
@@ -637,6 +633,9 @@ if __name__ == "__main__":
     print("  - Face detection → Voice recording (3s) → Authentication")
     print("  - No button clicks needed after starting!")
     print("="*60 + "\n")
+
+    dummy_audio = np.zeros(int(VOICE_SR * 1.0), dtype=float)                 #1 sec of silence
+    _ = Voice_embedding(embedding_model, dummy_audio, sr=VOICE_SR)           #Fixed Voice Model Lag
     
     demo.launch(
         server_name="127.0.0.1",
