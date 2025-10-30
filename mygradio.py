@@ -15,6 +15,9 @@ import tensorflow as tf
 import mediapipe as mp
 import pyodbc
 import sounddevice as sd
+import scipy.signal as signal
+import noisereduce as nr
+import soundfile as sf
 
 # ========================================
 # Azure
@@ -33,8 +36,8 @@ cursor = conn.cursor()
 # ========================================
 # CONFIGURATION
 # ========================================
-FACE_THRESHOLD = 0.5
-VOICE_THRESHOLD = 0.7
+FACE_THRESHOLD = 0.6
+VOICE_THRESHOLD = 0.8
 VOICE_DURATION = 3
 VOICE_SR = 16000
 EAR_THRESHOLD = 0.20
@@ -106,7 +109,7 @@ def load_models():
     facenet = InceptionResnetV1(pretrained='vggface2').eval().to(device)
     
     # Voice model
-    siamese_model = tf.keras.models.load_model("Models/Voice_verification_model2.h5", compile=False)
+    siamese_model = tf.keras.models.load_model("Models/Voice_verification_model5.h5", compile=False)
     embedding_model = siamese_model.layers[3]
     
     # Drowsiness models
@@ -334,21 +337,35 @@ def process_voice_verification(audio_data):
     if audio_data is None or len(audio_data) == 0:
         return "❌ No audio received", False
     
-    # Audio data is already float32 from sounddevice
     audio_data = audio_data.astype(float)
     
-    # Get voice embedding
-    test_voice_emb = Voice_embedding(embedding_model, audio_data, sr=VOICE_SR)
+    #Band-pass filter (to remove noise outside voice range) ---
+    lowcut = 60.0
+    highcut = 6000.0
+
+    nyquist = 0.5 * VOICE_SR
+    b, a = signal.butter(3, [lowcut / nyquist, highcut / nyquist], btype='band')
+    filtered_audio = signal.lfilter(b, a, audio_data)
+
+    #clean_audio = nr.reduce_noise(y=audio_data, sr=VOICE_SR)
+
+    # Silence detection ---
+    energy = np.mean(filtered_audio**2)
+    silence_threshold = 1e-4
+
+    test_voice_emb = Voice_embedding(embedding_model, audio_data, sr=VOICE_SR)    #filter audio
     
     ref_voice_emb = ref_voice_embeddings[state.recognized_person_idx]
     
     if ref_voice_emb is None:
-        state.current_state = STATE_MONITORING
+        state.current_state = STATE_FACE_DETECTION
+        state.recognized_person_id = None
+        state.recognized_person_name = None
         return "⚠️ No voice reference available. Proceeding to monitoring...", True
     
     voice_sim = Voice_cosine_similarity(test_voice_emb, ref_voice_emb.reshape(1, -1))
     
-    if voice_sim > VOICE_THRESHOLD:
+    if (voice_sim > VOICE_THRESHOLD) and (energy > silence_threshold):
         cursor.execute(
             "INSERT INTO recognition_log (person_id, similarity, verification_type) VALUES (?, ?, ?)",
             (state.recognized_person_id, float(voice_sim), 'voice')
@@ -357,6 +374,11 @@ def process_voice_verification(audio_data):
         
         state.current_state = STATE_MONITORING
         return f"✅ Voice Verified! Similarity: {voice_sim:.4f}", True
+    
+    elif (energy < silence_threshold):
+        state.current_state = STATE_FACE_DETECTION
+        return "🤫 No voice detected (silence)", False
+    
     else:
         state.current_state = STATE_FACE_DETECTION
         state.recognized_person_id = None
