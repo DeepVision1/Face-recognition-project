@@ -28,6 +28,7 @@ VOICE_DURATION = 3
 VOICE_SR = 16000
 EAR_THRESHOLD = 0.20
 EAR_CONSEC_FRAMES = 15
+HEAD_CONSEC_FRAMES = 15
 HEAD_PITCH_THRESHOLD = 15.0
 
 # States
@@ -47,6 +48,7 @@ class SystemState:
         self.recognized_person_name = None
         self.recognized_person_idx = None
         self.ear_counter = 0
+        self.head_counter = 0
         self.frame_count = 0
         self.last_alert_time = 0
         self.status_message = "System Initializing..."
@@ -397,8 +399,8 @@ def process_monitoring(frame):
         ear = (left_ear + right_ear) / 2.0
         
         # Draw eye landmarks
-        for (x, y) in left_eye + right_eye:
-            cv2.circle(frame, (x, y), 2, (0, 255, 255), -1)
+        # for (x, y) in left_eye + right_eye:
+        #     cv2.circle(frame, (x, y), 2, (0, 255, 255), -1)
         
         # Head pitch
         pitch = estimate_head_pitch(lm, frame.shape)
@@ -417,12 +419,17 @@ def process_monitoring(frame):
         else:
             state.ear_counter = 0
         
+        if pitch > HEAD_PITCH_THRESHOLD:
+            state.head_counter += 1
+        else:
+            state.head_counter = 0
+        
         if state.ear_counter >= EAR_CONSEC_FRAMES:
             cv2.putText(frame, "ALERT: Eyes Closed!", (10, 130),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
             alert_messages.append("🚨 DROWSINESS DETECTED: Eyes closed!")
         
-        if pitch > HEAD_PITCH_THRESHOLD:
+        if state.head_counter >= HEAD_CONSEC_FRAMES:
             cv2.putText(frame, "ALERT: Head Down!", (10, 170),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3)
             alert_messages.append("🚨 DROWSINESS DETECTED: Head down!")
