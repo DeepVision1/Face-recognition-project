@@ -22,7 +22,7 @@ import soundfile as sf
 # CONFIGURATION
 # ========================================
 FACE_THRESHOLD = 0.6
-VOICE_THRESHOLD = 0.8
+VOICE_THRESHOLD = 0.7
 VOICE_DURATION = 3
 VOICE_SR = 16000
 EAR_THRESHOLD = 0.20
