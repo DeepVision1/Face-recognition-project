@@ -13,10 +13,8 @@ import math
 import librosa
 import tensorflow as tf
 import mediapipe as mp
-import pyodbc
 import sounddevice as sd
 import scipy.signal as signal
-import noisereduce as nr
 import soundfile as sf
 
 # ========================================
@@ -30,8 +28,7 @@ password = '#Shadowsonic2003'
 driver = '{ODBC Driver 18 for SQL Server}'
 
 conn_str = f'DRIVER={driver};SERVER={server};DATABASE={database};UID={username};PWD={password}'
-conn = pyodbc.connect(conn_str)
-cursor = conn.cursor()
+
 
 # ========================================
 # CONFIGURATION

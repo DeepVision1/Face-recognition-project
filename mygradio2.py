@@ -16,7 +16,6 @@ import tensorflow as tf
 import mediapipe as mp
 import sounddevice as sd
 import scipy.signal as signal
-import noisereduce as nr
 import soundfile as sf
 
 # ========================================
